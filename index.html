@@ -123,14 +123,11 @@
     }
 
     .board-head {
-      position: sticky;
-      top: 0;
       padding: 10px 8px;
       border-bottom: 1px solid var(--border);
       background: var(--surface);
       font-weight: 600;
       text-align: center;
-      z-index: 2;
     }
     .board-head small { display: block; color: var(--muted); font-weight: 400; font-size: 12px; }
     .board-head .dot {
@@ -214,6 +211,8 @@
     #booking-form .row label { flex: 1; }
 
     .form-error { margin: 0; min-height: 1.5em; color: var(--danger); font-size: 13px; }
+    .form-error.note { color: var(--muted); }
+    #booking-form :disabled { opacity: .7; }
 
     .dialog-actions { display: flex; gap: 8px; align-items: center; }
     .dialog-actions .spacer { flex: 1; }
@@ -422,7 +421,7 @@
       nodes.push(timecol);
 
       for (const room of ROOMS) {
-        const col = el('div', { class: 'roomcol', style: { '--room-color': room.color } });
+        const col = el('div', { class: 'roomcol' });
         col.style.setProperty('--room-color', room.color);
 
         for (let m = DAY_START; m < DAY_END; m += STEP) {
@@ -480,19 +479,27 @@
       }
     });
 
+    const FIELD_IDS = ['f-room', 'f-date', 'f-start', 'f-end', 'f-title', 'f-booker'];
+    let locked = false;
+
     function openDialog(b) {
       editingId = b.id || null;
-      $('dialog-title').textContent = editingId ? '修改預約' : '新增預約';
+      // 已經開始（或結束）的預約不能再改，只能取消
+      locked = !!editingId && startOf(b.date, b.start) < new Date();
+      $('dialog-title').textContent = locked ? '預約詳細' : editingId ? '修改預約' : '新增預約';
       $('btn-delete').hidden = !editingId;
+      $('btn-save').hidden = locked;
+      FIELD_IDS.forEach((id) => { $(id).disabled = locked; });
       $('f-room').value = b.roomId;
       $('f-date').value = b.date;
       $('f-start').value = b.start;
       $('f-end').value = b.end;
       $('f-title').value = b.title || '';
       $('f-booker').value = b.booker || '';
-      formError.textContent = '';
+      formError.textContent = locked ? '此預約已開始，只能取消。' : '';
+      formError.classList.toggle('note', locked);
       dialog.showModal();
-      (editingId ? $('btn-save') : $('f-title')).focus();
+      (locked ? $('btn-close') : editingId ? $('btn-save') : $('f-title')).focus();
     }
 
     function defaultNewBooking() {
@@ -510,6 +517,7 @@
 
     form.addEventListener('submit', (e) => {
       e.preventDefault();
+      if (locked) return;
       const data = {
         roomId: $('f-room').value,
         date: $('f-date').value,
@@ -521,7 +529,6 @@
       const error = validate(data, editingId);
       if (error) {
         formError.textContent = error;
-        showToast(error, 'error');
         return;
       }
 
