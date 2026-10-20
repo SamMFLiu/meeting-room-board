@@ -181,23 +181,47 @@
       position: absolute;
       left: 4px;
       right: 4px;
-      padding: 4px 8px;
-      border: 0;
       border-left: 4px solid var(--room-color);
       border-radius: 6px;
       background: color-mix(in srgb, var(--room-color) 16%, var(--surface));
+      overflow: hidden;
+      z-index: 1;
+    }
+    .booking:hover { background: color-mix(in srgb, var(--room-color) 26%, var(--surface)); }
+    .booking-open {
+      display: flex;
+      flex-direction: column;
+      justify-content: flex-start;
+      width: 100%;
+      height: 100%;
+      padding: 2px 8px;
+      border: 0;
+      background: transparent;
       color: var(--text);
       text-align: left;
       font: inherit;
       font-size: 13px;
-      line-height: 1.35;
-      overflow: hidden;
+      line-height: 1.3;
       cursor: pointer;
-      z-index: 1;
     }
-    .booking:hover { background: color-mix(in srgb, var(--room-color) 26%, var(--surface)); }
-    .booking strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-    .booking span { display: block; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    /* 標題右側留位置給「取消」按鈕 */
+    .booking-open strong { display: block; padding-right: 38px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .booking-open span { display: block; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .booking-cancel {
+      position: absolute;
+      top: 2px;
+      right: 3px;
+      padding: 1px 6px;
+      border: 1px solid color-mix(in srgb, var(--danger) 45%, transparent);
+      border-radius: 6px;
+      background: var(--surface);
+      color: var(--danger);
+      font: inherit;
+      font-size: 12px;
+      line-height: 1.4;
+      cursor: pointer;
+    }
+    .booking-cancel:hover { background: var(--danger); color: #fff; }
 
     .hint { color: var(--muted); font-size: 13px; margin: 10px 0 24px; }
 
@@ -271,7 +295,7 @@
     <div class="board-scroll">
       <div class="board" id="board"></div>
     </div>
-    <p class="hint">點一下空白時段可預約 30 分鐘；按住拖曳可選取連續多格（手機請長按後拖曳）。點預約色塊可修改或取消。</p>
+    <p class="hint">點一下空白時段可預約 30 分鐘；按住拖曳可選取連續多格（手機請長按後拖曳）。點預約色塊可修改，按「取消」可直接取消預約。</p>
   </main>
 
   <dialog id="booking-dialog">
@@ -460,15 +484,20 @@
           .forEach((b) => {
             const top = (toMin(b.start) - DAY_START) / total * 100;
             const height = (toMin(b.end) - toMin(b.start)) / total * 100;
-            col.append(el('button', {
-              type: 'button',
+            col.append(el('div', {
               class: 'booking',
               style: { top: `calc(${top}% + 2px)`, height: `calc(${height}% - 4px)` },
               title: `${b.title}｜${b.booker}｜${b.start}–${b.end}`,
-              onclick: () => openDialog(b),
             },
-            el('strong', {}, b.title),
-            el('span', {}, `${b.booker}・${b.start}–${b.end}`)));
+            el('button', { type: 'button', class: 'booking-open', onclick: () => openDialog(b) },
+              el('strong', {}, b.title),
+              el('span', {}, `${b.booker}・${b.start}–${b.end}`)),
+            el('button', {
+              type: 'button',
+              class: 'booking-cancel',
+              'aria-label': `取消「${b.title}」（${b.start}–${b.end}）`,
+              onclick: () => cancelBooking(b.id),
+            }, '取消')));
           });
 
         nodes.push(col);
@@ -656,15 +685,20 @@
       showToast(editingId ? '預約已更新' : '預約成功');
     });
 
-    $('btn-delete').addEventListener('click', () => {
-      const b = bookings.find((x) => x.id === editingId);
-      if (!b) return;
-      if (!confirm(`確定要取消「${b.title}」（${b.start}–${b.end}）嗎？`)) return;
-      bookings = bookings.filter((x) => x.id !== editingId);
+    // 取消預約：先確認，再同步更新 localStorage 與看板；回傳是否真的取消了
+    function cancelBooking(id) {
+      const b = bookings.find((x) => x.id === id);
+      if (!b) return false;
+      if (!confirm(`確定要取消「${b.title}」（${b.start}–${b.end}）嗎？`)) return false;
+      bookings = bookings.filter((x) => x.id !== id);
       saveBookings();
-      dialog.close();
       render();
       showToast('預約已取消');
+      return true;
+    }
+
+    $('btn-delete').addEventListener('click', () => {
+      if (cancelBooking(editingId)) dialog.close();
     });
 
     $('btn-close').addEventListener('click', () => dialog.close());
