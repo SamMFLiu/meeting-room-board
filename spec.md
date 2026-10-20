@@ -47,7 +47,8 @@
 
 ## 5. 技術限制
 - 純前端：HTML + CSS + 原生 JavaScript，不使用框架，也不需要建置工具
-- 雙擊 `index.html` 就能直接用（不用 ES module，以避開 `file://` 的限制）
+- 檔案固定為 `index.html` + `app.js` + `test.html` 三檔，禁止再拆分其他檔案、禁止外部框架
+- 雙擊 `index.html` 就能直接用（`app.js` 以一般 `<script src>` 載入，不用 ES module，以避開 `file://` 的限制）
 - 資料存在瀏覽器 `localStorage`，換瀏覽器或清除網站資料後就會不見
 - 支援新版 Chrome／Edge；手機寬度（375px）也要能用，時段表只在自己的區塊內水平捲動
 

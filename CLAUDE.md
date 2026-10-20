@@ -12,7 +12,7 @@
 - 非目標：登入／權限、多人共享、後端、會議室管理、週檢視／清單檢視、18:00 以後的時段
 
 ## 開發規範
-- 本專案為**單一 HTML 檔案**，檔名固定為 `index.html`；CSS 寫在 `<style>`、JavaScript 寫在 `<script>` 內。**禁止拆分成多個檔案，禁止引入外部框架或函式庫**（只用原生 HTML / CSS / JavaScript）。
+- 本專案固定為 **`index.html` + `app.js` + `test.html` 三檔**：CSS 寫在 `index.html` 的 `<style>`；預約衝突判斷放在 `app.js`，以一般 `<script src="app.js">` 載入（不用 ES module）；其餘 JavaScript 寫在 `index.html` 的 `<script>` 內。**禁止再拆分其他檔案，禁止引入外部框架或函式庫**（只用原生 HTML / CSS / JavaScript）。
 - 雙擊 `index.html` 就要能直接使用，不需要建置工具或伺服器。
 - **所有介面文字與程式註解都使用繁體中文。**
 - **每次修改後，用一句話說明改了什麼。**

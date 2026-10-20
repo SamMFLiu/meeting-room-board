@@ -337,6 +337,7 @@
 
   <div class="toast" id="toast" role="status" aria-live="polite"></div>
 
+  <script src="app.js"></script>
   <script>
     'use strict';
 
@@ -358,7 +359,6 @@
     const pad = (n) => String(n).padStart(2, '0');
     const toISODate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
     const parseISODate = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
-    const toMin = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
     const fromMin = (min) => `${pad(Math.floor(min / 60))}:${pad(min % 60)}`;
     const startOf = (date, hhmm) => { const d = parseISODate(date); d.setMinutes(toMin(hhmm)); return d; };
     const roomById = (id) => ROOMS.find((r) => r.id === id);
@@ -405,9 +405,7 @@
     let currentDate = toISODate(new Date());
     let editingId = null;
 
-    // ---- 驗證 ----
-    const overlaps = (a, b) => toMin(a.start) < toMin(b.end) && toMin(b.start) < toMin(a.end);
-
+    // ---- 驗證（toMin、findConflict 定義在 app.js） ----
     function validate(data, ignoreId) {
       if (!data.roomId || !data.date || !data.start || !data.end || !data.title || !data.booker) {
         return '請填寫所有欄位。';
@@ -423,8 +421,7 @@
       if (e <= s) return '結束時間必須晚於開始時間。';
       if (startOf(data.date, data.start) < new Date()) return '不能預約已經過去的時段。';
 
-      const clash = bookings.find((b) =>
-        b.id !== ignoreId && b.roomId === data.roomId && b.date === data.date && overlaps(b, data));
+      const clash = findConflict(bookings, data, ignoreId);
       if (clash) {
         return `與既有預約衝突：「${clash.title}」（${clash.booker}，${clash.start}–${clash.end}）。`;
       }
