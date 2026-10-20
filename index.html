@@ -288,6 +288,7 @@
     <button type="button" class="btn" id="btn-today">今天</button>
     <button type="button" class="btn" id="btn-next" aria-label="後一天">後一天 ›</button>
     <input type="date" id="date-picker" aria-label="選擇日期">
+    <button type="button" class="btn" id="btn-export">匯出 CSV</button>
     <span class="date-label" id="date-label"></span>
   </nav>
 
@@ -720,6 +721,36 @@
     $('btn-today').addEventListener('click', () => goTo(toISODate(new Date())));
     $('date-picker').addEventListener('change', (e) => goTo(e.target.value));
     $('btn-new').addEventListener('click', () => openDialog(defaultNewBooking()));
+
+    // ---- 匯出 CSV ----
+    // 欄位含逗號、雙引號或換行時要用雙引號包起來，內部的雙引號改成兩個
+    const csvField = (v) => (/[",\r\n]/.test(v) ? `"${String(v).replace(/"/g, '""')}"` : String(v));
+
+    // 下載目前選定日期的預約清單（會議室、時段、預約人），依會議室順序、再依開始時間排序
+    function exportCsv() {
+      const roomOrder = (id) => ROOMS.findIndex((r) => r.id === id);
+      const list = bookings
+        .filter((b) => b.date === currentDate)
+        .sort((a, b) => roomOrder(a.roomId) - roomOrder(b.roomId) || toMin(a.start) - toMin(b.start));
+      if (list.length === 0) {
+        showToast('這一天沒有預約可以匯出');
+        return;
+      }
+
+      const rows = [['會議室', '時段', '預約人']];
+      for (const b of list) rows.push([roomById(b.roomId).name, `${b.start}–${b.end}`, b.booker]);
+      // 開頭加 BOM，Excel 開啟時中文才不會變亂碼
+      const csv = '﻿' + rows.map((r) => r.map(csvField).join(',')).join('\r\n') + '\r\n';
+
+      const url = URL.createObjectURL(new Blob([csv], { type: 'text/csv;charset=utf-8' }));
+      const a = el('a', { href: url, download: `會議室預約-${currentDate}.csv` });
+      document.body.append(a);
+      a.click();
+      a.remove();
+      setTimeout(() => URL.revokeObjectURL(url), 0);
+    }
+
+    $('btn-export').addEventListener('click', exportCsv);
 
     render();
     // 每分鐘重繪一次，讓「已過時段」保持正確
