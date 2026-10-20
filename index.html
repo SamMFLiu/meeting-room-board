@@ -117,6 +117,9 @@
     }
 
     .board {
+      -webkit-user-select: none;
+      user-select: none;
+      -webkit-touch-callout: none;
       display: grid;
       grid-template-columns: 60px repeat(3, minmax(150px, 1fr));
       min-width: 510px;
@@ -166,6 +169,13 @@
     .slot:nth-child(even) { border-bottom-style: dashed; }
     .slot:hover:not(:disabled) { background: var(--hover); }
     .slot:disabled { background: var(--past); cursor: not-allowed; }
+    .slot.selecting, .slot.selecting:hover { background: color-mix(in srgb, var(--room-color) 28%, var(--surface)); }
+    .slot[data-range]::after {
+      content: attr(data-range);
+      color: var(--text);
+      font-size: 12px;
+      font-weight: 600;
+    }
 
     .booking {
       position: absolute;
@@ -261,7 +271,7 @@
     <div class="board-scroll">
       <div class="board" id="board"></div>
     </div>
-    <p class="hint">點空白時段即可預約；點預約色塊可修改或取消。</p>
+    <p class="hint">點一下空白時段可預約 30 分鐘；按住拖曳可選取連續多格（手機請長按後拖曳）。點預約色塊可修改或取消。</p>
   </main>
 
   <dialog id="booking-dialog">
@@ -314,6 +324,8 @@
     const DAY_START = 8 * 60;   // 08:00
     const DAY_END = 18 * 60;    // 18:00
     const STEP = 30;            // 分鐘
+    const SLOT_COUNT = (DAY_END - DAY_START) / STEP;
+    const LONG_PRESS_MS = 350;  // 手機長按多久開始拖曳選取
     const STORAGE_KEY = 'mrb:bookings';
     const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
 
@@ -424,20 +436,27 @@
         const col = el('div', { class: 'roomcol' });
         col.style.setProperty('--room-color', room.color);
 
-        for (let m = DAY_START; m < DAY_END; m += STEP) {
+        const dayBookings = bookings.filter((b) => b.roomId === room.id && b.date === currentDate);
+        // 不能被選取的格子：已過去，或已經有人預約
+        const blocked = [];
+
+        for (let i = 0; i < SLOT_COUNT; i++) {
+          const m = DAY_START + i * STEP;
           const start = fromMin(m);
           const past = startOf(currentDate, start) < now;
+          blocked.push(past || dayBookings.some((b) => toMin(b.start) < m + STEP && m < toMin(b.end)));
           col.append(el('button', {
             type: 'button',
             class: 'slot',
             disabled: past,
             'aria-label': `${room.name} ${start} ${past ? '（已過）' : '預約'}`,
-            onclick: () => openDialog({ roomId: room.id, date: currentDate, start, end: fromMin(Math.min(m + 60, DAY_END)) }),
+            // 滑鼠與觸控由拖曳模組處理；這裡只處理鍵盤（Enter／空白鍵）
+            onclick: (e) => { if (e.detail === 0) openRange(room.id, i, i); },
           }));
         }
+        bindDragSelect(col, room.id, blocked);
 
-        bookings
-          .filter((b) => b.roomId === room.id && b.date === currentDate)
+        dayBookings
           .forEach((b) => {
             const top = (toMin(b.start) - DAY_START) / total * 100;
             const height = (toMin(b.end) - toMin(b.start)) / total * 100;
@@ -457,6 +476,98 @@
 
       board.replaceChildren(...nodes);
     }
+
+    // ---- 拖曳選取時段 ----
+    let drag = null; // { col, roomId, blocked, anchor, from, to, pointerId, active, timer, x, y }
+
+    function openRange(roomId, from, to) {
+      openDialog({
+        roomId,
+        date: currentDate,
+        start: fromMin(DAY_START + from * STEP),
+        end: fromMin(DAY_START + (to + 1) * STEP),
+      });
+    }
+
+    function slotIndexAt(col, clientY) {
+      const rect = col.getBoundingClientRect();
+      const i = Math.floor((clientY - rect.top) / (rect.height / SLOT_COUNT));
+      return Math.min(Math.max(i, 0), SLOT_COUNT - 1);
+    }
+
+    // 從起點往目標格延伸，碰到不能選的格子就停在它前一格
+    function updateSelection(target) {
+      let from = drag.anchor;
+      let to = drag.anchor;
+      if (target > drag.anchor) while (to < target && !drag.blocked[to + 1]) to++;
+      else while (from > target && !drag.blocked[from - 1]) from--;
+      drag.from = from;
+      drag.to = to;
+
+      drag.col.querySelectorAll('.slot').forEach((slot, i) => {
+        slot.classList.toggle('selecting', i >= from && i <= to);
+        if (i === from) slot.dataset.range = `${fromMin(DAY_START + from * STEP)}–${fromMin(DAY_START + (to + 1) * STEP)}`;
+        else delete slot.dataset.range;
+      });
+    }
+
+    function endDrag() {
+      if (!drag) return;
+      clearTimeout(drag.timer);
+      drag.col.querySelectorAll('.slot').forEach((slot) => {
+        slot.classList.remove('selecting');
+        delete slot.dataset.range;
+      });
+      drag = null;
+    }
+
+    function startSelecting() {
+      drag.active = true;
+      updateSelection(drag.anchor);
+    }
+
+    function bindDragSelect(col, roomId, blocked) {
+      col.addEventListener('pointerdown', (e) => {
+        const slot = e.target.closest('.slot');
+        if (!slot || slot.disabled || e.button !== 0 || drag) return;
+        const anchor = [...col.querySelectorAll('.slot')].indexOf(slot);
+        if (blocked[anchor]) return;
+        drag = { col, roomId, blocked, anchor, from: anchor, to: anchor, pointerId: e.pointerId, active: false, x: e.clientX, y: e.clientY };
+
+        if (e.pointerType === 'touch') {
+          // 觸控：長按才開始選取，直接滑動仍然是捲動畫面
+          drag.timer = setTimeout(startSelecting, LONG_PRESS_MS);
+        } else {
+          e.preventDefault();
+          // 拖出欄位外也能繼續收到事件；取得失敗時不影響選取
+          try { col.setPointerCapture(e.pointerId); } catch { /* 忽略 */ }
+          startSelecting();
+        }
+      });
+
+      col.addEventListener('pointermove', (e) => {
+        if (!drag || drag.col !== col || e.pointerId !== drag.pointerId) return;
+        if (drag.active) {
+          updateSelection(slotIndexAt(col, e.clientY));
+        } else if (Math.hypot(e.clientX - drag.x, e.clientY - drag.y) > 8) {
+          endDrag(); // 長按前就移動了，當作捲動
+        }
+      });
+
+      col.addEventListener('pointerup', (e) => {
+        if (!drag || drag.col !== col || e.pointerId !== drag.pointerId) return;
+        const { from, to } = drag; // 觸控輕點（未長按）時 from = to = 起點，預約單格
+        endDrag();
+        openRange(roomId, from, to);
+      });
+
+      col.addEventListener('pointercancel', endDrag);
+    }
+
+    // 長按選取時，阻止畫面跟著手指捲動與跳出系統選單
+    board.addEventListener('touchmove', (e) => { if (drag && drag.active) e.preventDefault(); }, { passive: false });
+    board.addEventListener('contextmenu', (e) => { if (drag) e.preventDefault(); });
+    document.addEventListener('keydown', (e) => { if (e.key === 'Escape') endDrag(); });
 
     // ---- 預約對話框 ----
     const dialog = $('booking-dialog');
@@ -512,7 +623,7 @@
         if (m > DAY_END - STEP) { date = addDays(date, 1); m = DAY_START; }
         m = Math.max(m, DAY_START);
       }
-      return { roomId: ROOMS[0].id, date, start: fromMin(m), end: fromMin(Math.min(m + 60, DAY_END)) };
+      return { roomId: ROOMS[0].id, date, start: fromMin(m), end: fromMin(m + STEP) };
     }
 
     form.addEventListener('submit', (e) => {
@@ -578,7 +689,7 @@
 
     render();
     // 每分鐘重繪一次，讓「已過時段」保持正確
-    setInterval(() => { if (!dialog.open) render(); }, 60 * 1000);
+    setInterval(() => { if (!dialog.open && !drag) render(); }, 60 * 1000);
   </script>
 </body>
 </html>
