@@ -1,0 +1,577 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>會議室預約看板</title>
+  <style>
+    :root {
+      --bg: #f6f7f9;
+      --surface: #ffffff;
+      --text: #1f2328;
+      --muted: #6b7280;
+      --border: #e3e6ea;
+      --line: #eef0f3;
+      --primary: #2563eb;
+      --primary-text: #ffffff;
+      --danger: #dc2626;
+      --past: #f0f1f3;
+      --hover: #eef4ff;
+      --room-big: #2563eb;
+      --room-a: #059669;
+      --room-b: #d97706;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .06), 0 4px 12px rgba(0, 0, 0, .06);
+      --slot-h: 40px;
+      color-scheme: light;
+    }
+
+    @media (prefers-color-scheme: dark) {
+      :root {
+        --bg: #0f1115;
+        --surface: #181b21;
+        --text: #e6e8eb;
+        --muted: #9aa1ab;
+        --border: #2a2f37;
+        --line: #22262d;
+        --primary: #3b82f6;
+        --danger: #ef4444;
+        --past: #14161a;
+        --hover: #1d2738;
+        --room-big: #3b82f6;
+        --room-a: #10b981;
+        --room-b: #f59e0b;
+        --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 4px 12px rgba(0, 0, 0, .3);
+        color-scheme: dark;
+      }
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      background: var(--bg);
+      color: var(--text);
+      font-family: system-ui, -apple-system, "Segoe UI", "Microsoft JhengHei", "PingFang TC", sans-serif;
+      font-size: 15px;
+      line-height: 1.5;
+    }
+
+    .topbar, .datebar, main {
+      max-width: 1000px;
+      margin: 0 auto;
+      padding-left: 16px;
+      padding-right: 16px;
+    }
+
+    .topbar {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding-top: 20px;
+      padding-bottom: 12px;
+    }
+
+    h1 { font-size: 22px; margin: 0; }
+
+    .datebar {
+      display: flex;
+      flex-wrap: wrap;
+      align-items: center;
+      gap: 8px;
+      padding-bottom: 12px;
+    }
+
+    .date-label { color: var(--muted); font-weight: 600; }
+
+    .btn {
+      font: inherit;
+      padding: 6px 12px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+      cursor: pointer;
+    }
+    .btn:hover { border-color: var(--primary); }
+    .btn-primary { background: var(--primary); border-color: var(--primary); color: var(--primary-text); }
+    .btn-primary:hover { filter: brightness(1.08); }
+    .btn-danger { color: var(--danger); border-color: var(--danger); }
+
+    input, select {
+      font: inherit;
+      padding: 6px 8px;
+      border: 1px solid var(--border);
+      border-radius: 8px;
+      background: var(--surface);
+      color: var(--text);
+    }
+
+    /* 看板 */
+    .board-scroll {
+      overflow-x: auto;
+      background: var(--surface);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      box-shadow: var(--shadow);
+    }
+
+    .board {
+      display: grid;
+      grid-template-columns: 60px repeat(3, minmax(150px, 1fr));
+      min-width: 510px;
+    }
+
+    .board-head {
+      position: sticky;
+      top: 0;
+      padding: 10px 8px;
+      border-bottom: 1px solid var(--border);
+      background: var(--surface);
+      font-weight: 600;
+      text-align: center;
+      z-index: 2;
+    }
+    .board-head small { display: block; color: var(--muted); font-weight: 400; font-size: 12px; }
+    .board-head .dot {
+      display: inline-block;
+      width: 8px; height: 8px;
+      border-radius: 50%;
+      margin-right: 6px;
+      vertical-align: middle;
+    }
+
+    .timecol { border-right: 1px solid var(--border); }
+    .time {
+      height: var(--slot-h);
+      padding: 2px 8px 0 0;
+      text-align: right;
+      font-size: 12px;
+      color: var(--muted);
+      font-variant-numeric: tabular-nums;
+    }
+
+    .roomcol {
+      position: relative;
+      border-right: 1px solid var(--line);
+    }
+    .roomcol:last-child { border-right: 0; }
+
+    .slot {
+      display: block;
+      width: 100%;
+      height: var(--slot-h);
+      border: 0;
+      border-bottom: 1px solid var(--line);
+      background: transparent;
+      cursor: pointer;
+    }
+    .slot:nth-child(even) { border-bottom-style: dashed; }
+    .slot:hover:not(:disabled) { background: var(--hover); }
+    .slot:disabled { background: var(--past); cursor: not-allowed; }
+
+    .booking {
+      position: absolute;
+      left: 4px;
+      right: 4px;
+      padding: 4px 8px;
+      border: 0;
+      border-left: 4px solid var(--room-color);
+      border-radius: 6px;
+      background: color-mix(in srgb, var(--room-color) 16%, var(--surface));
+      color: var(--text);
+      text-align: left;
+      font: inherit;
+      font-size: 13px;
+      line-height: 1.35;
+      overflow: hidden;
+      cursor: pointer;
+      z-index: 1;
+    }
+    .booking:hover { background: color-mix(in srgb, var(--room-color) 26%, var(--surface)); }
+    .booking strong { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+    .booking span { display: block; color: var(--muted); font-size: 12px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+
+    .hint { color: var(--muted); font-size: 13px; margin: 10px 0 24px; }
+
+    /* 預約對話框 */
+    dialog {
+      width: min(420px, calc(100vw - 32px));
+      padding: 0;
+      border: 1px solid var(--border);
+      border-radius: 12px;
+      background: var(--surface);
+      color: var(--text);
+      box-shadow: var(--shadow);
+    }
+    dialog::backdrop { background: rgba(0, 0, 0, .4); }
+
+    #booking-form { display: flex; flex-direction: column; gap: 12px; padding: 20px; }
+    #booking-form h2 { margin: 0; font-size: 18px; }
+    #booking-form label { display: flex; flex-direction: column; gap: 4px; font-size: 13px; color: var(--muted); }
+    #booking-form label > * { color: var(--text); font-size: 15px; }
+    #booking-form .row { display: flex; gap: 12px; }
+    #booking-form .row label { flex: 1; }
+
+    .form-error { margin: 0; min-height: 1.5em; color: var(--danger); font-size: 13px; }
+
+    .dialog-actions { display: flex; gap: 8px; align-items: center; }
+    .dialog-actions .spacer { flex: 1; }
+
+    /* 提示訊息 */
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 24px;
+      max-width: calc(100vw - 32px);
+      padding: 10px 16px;
+      border-radius: 8px;
+      background: var(--text);
+      color: var(--bg);
+      box-shadow: var(--shadow);
+      transform: translate(-50%, 20px);
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity .2s, transform .2s;
+      z-index: 10;
+    }
+    .toast.show { opacity: 1; transform: translate(-50%, 0); }
+    .toast.error { background: var(--danger); color: #fff; }
+
+    @media (max-width: 480px) {
+      h1 { font-size: 18px; }
+      .date-label { width: 100%; }
+    }
+  </style>
+</head>
+<body>
+  <header class="topbar">
+    <h1>會議室預約看板</h1>
+    <button type="button" class="btn btn-primary" id="btn-new">＋ 新增預約</button>
+  </header>
+
+  <nav class="datebar" aria-label="日期切換">
+    <button type="button" class="btn" id="btn-prev" aria-label="前一天">‹ 前一天</button>
+    <button type="button" class="btn" id="btn-today">今天</button>
+    <button type="button" class="btn" id="btn-next" aria-label="後一天">後一天 ›</button>
+    <input type="date" id="date-picker" aria-label="選擇日期">
+    <span class="date-label" id="date-label"></span>
+  </nav>
+
+  <main>
+    <div class="board-scroll">
+      <div class="board" id="board"></div>
+    </div>
+    <p class="hint">點空白時段即可預約；點預約色塊可修改或取消。</p>
+  </main>
+
+  <dialog id="booking-dialog">
+    <form id="booking-form" method="dialog" novalidate>
+      <h2 id="dialog-title">新增預約</h2>
+
+      <label>會議室
+        <select name="roomId" id="f-room"></select>
+      </label>
+      <label>日期
+        <input type="date" name="date" id="f-date">
+      </label>
+      <div class="row">
+        <label>開始
+          <select name="start" id="f-start"></select>
+        </label>
+        <label>結束
+          <select name="end" id="f-end"></select>
+        </label>
+      </div>
+      <label>會議主題
+        <input type="text" name="title" id="f-title" maxlength="50" placeholder="例如：週會">
+      </label>
+      <label>預約人
+        <input type="text" name="booker" id="f-booker" maxlength="20" placeholder="你的名字">
+      </label>
+
+      <p class="form-error" id="form-error" role="alert"></p>
+
+      <div class="dialog-actions">
+        <button type="button" class="btn btn-danger" id="btn-delete">取消預約</button>
+        <span class="spacer"></span>
+        <button type="button" class="btn" id="btn-close">關閉</button>
+        <button type="submit" class="btn btn-primary" id="btn-save">儲存</button>
+      </div>
+    </form>
+  </dialog>
+
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
+  <script>
+    'use strict';
+
+    // ---- 設定 ----
+    const ROOMS = [
+      { id: 'big', name: '大會議室', capacity: 12, color: 'var(--room-big)' },
+      { id: 'a', name: '小會議室 A', capacity: 6, color: 'var(--room-a)' },
+      { id: 'b', name: '小會議室 B', capacity: 4, color: 'var(--room-b)' },
+    ];
+    const DAY_START = 8 * 60;   // 08:00
+    const DAY_END = 18 * 60;    // 18:00
+    const STEP = 30;            // 分鐘
+    const STORAGE_KEY = 'mrb:bookings';
+    const WEEKDAYS = ['日', '一', '二', '三', '四', '五', '六'];
+
+    // ---- 工具函式 ----
+    const pad = (n) => String(n).padStart(2, '0');
+    const toISODate = (d) => `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`;
+    const parseISODate = (s) => { const [y, m, d] = s.split('-').map(Number); return new Date(y, m - 1, d); };
+    const toMin = (hhmm) => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
+    const fromMin = (min) => `${pad(Math.floor(min / 60))}:${pad(min % 60)}`;
+    const startOf = (date, hhmm) => { const d = parseISODate(date); d.setMinutes(toMin(hhmm)); return d; };
+    const roomById = (id) => ROOMS.find((r) => r.id === id);
+    const newId = () => Date.now().toString(36) + Math.random().toString(36).slice(2, 7);
+
+    function addDays(iso, n) {
+      const d = parseISODate(iso);
+      d.setDate(d.getDate() + n);
+      return toISODate(d);
+    }
+
+    function el(tag, attrs = {}, ...children) {
+      const node = document.createElement(tag);
+      for (const [k, v] of Object.entries(attrs)) {
+        if (k === 'class') node.className = v;
+        else if (k === 'style') Object.assign(node.style, v);
+        else if (k.startsWith('on')) node.addEventListener(k.slice(2), v);
+        else if (v === true) node.setAttribute(k, '');
+        else if (v !== false && v != null) node.setAttribute(k, v);
+      }
+      for (const c of children) node.append(c);
+      return node;
+    }
+
+    // ---- 資料存取 ----
+    function loadBookings() {
+      try {
+        const data = JSON.parse(localStorage.getItem(STORAGE_KEY));
+        return Array.isArray(data) ? data : [];
+      } catch {
+        return [];
+      }
+    }
+
+    function saveBookings() {
+      try {
+        localStorage.setItem(STORAGE_KEY, JSON.stringify(bookings));
+      } catch {
+        showToast('無法儲存資料（瀏覽器儲存空間不可用）', 'error');
+      }
+    }
+
+    let bookings = loadBookings();
+    let currentDate = toISODate(new Date());
+    let editingId = null;
+
+    // ---- 驗證 ----
+    const overlaps = (a, b) => toMin(a.start) < toMin(b.end) && toMin(b.start) < toMin(a.end);
+
+    function validate(data, ignoreId) {
+      if (!data.roomId || !data.date || !data.start || !data.end || !data.title || !data.booker) {
+        return '請填寫所有欄位。';
+      }
+      if (!roomById(data.roomId)) return '請選擇有效的會議室。';
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(data.date)) return '日期格式不正確。';
+      if (!/^\d{2}:\d{2}$/.test(data.start) || !/^\d{2}:\d{2}$/.test(data.end)) return '時間格式不正確。';
+
+      const s = toMin(data.start);
+      const e = toMin(data.end);
+      if (s % STEP !== 0 || e % STEP !== 0) return '時間必須是整點或半點（:00 或 :30）。';
+      if (s < DAY_START || e > DAY_END) return '預約時間必須在 08:00–18:00 之間。';
+      if (e <= s) return '結束時間必須晚於開始時間。';
+      if (startOf(data.date, data.start) < new Date()) return '不能預約已經過去的時段。';
+
+      const clash = bookings.find((b) =>
+        b.id !== ignoreId && b.roomId === data.roomId && b.date === data.date && overlaps(b, data));
+      if (clash) {
+        return `與既有預約衝突：「${clash.title}」（${clash.booker}，${clash.start}–${clash.end}）。`;
+      }
+      return null;
+    }
+
+    // ---- 看板 ----
+    const $ = (id) => document.getElementById(id);
+    const board = $('board');
+
+    function render() {
+      const d = parseISODate(currentDate);
+      const isToday = currentDate === toISODate(new Date());
+      $('date-label').textContent =
+        `${d.getFullYear()}/${d.getMonth() + 1}/${d.getDate()}（${WEEKDAYS[d.getDay()]}）${isToday ? '・今天' : ''}`;
+      $('date-picker').value = currentDate;
+
+      const now = new Date();
+      const total = DAY_END - DAY_START;
+      const nodes = [el('div', { class: 'board-head' })];
+
+      for (const room of ROOMS) {
+        nodes.push(el('div', { class: 'board-head' },
+          el('span', { class: 'dot', style: { background: room.color } }),
+          room.name,
+          el('small', {}, `${room.capacity} 人`)));
+      }
+
+      const timecol = el('div', { class: 'timecol' });
+      for (let m = DAY_START; m < DAY_END; m += STEP) timecol.append(el('div', { class: 'time' }, fromMin(m)));
+      nodes.push(timecol);
+
+      for (const room of ROOMS) {
+        const col = el('div', { class: 'roomcol', style: { '--room-color': room.color } });
+        col.style.setProperty('--room-color', room.color);
+
+        for (let m = DAY_START; m < DAY_END; m += STEP) {
+          const start = fromMin(m);
+          const past = startOf(currentDate, start) < now;
+          col.append(el('button', {
+            type: 'button',
+            class: 'slot',
+            disabled: past,
+            'aria-label': `${room.name} ${start} ${past ? '（已過）' : '預約'}`,
+            onclick: () => openDialog({ roomId: room.id, date: currentDate, start, end: fromMin(Math.min(m + 60, DAY_END)) }),
+          }));
+        }
+
+        bookings
+          .filter((b) => b.roomId === room.id && b.date === currentDate)
+          .forEach((b) => {
+            const top = (toMin(b.start) - DAY_START) / total * 100;
+            const height = (toMin(b.end) - toMin(b.start)) / total * 100;
+            col.append(el('button', {
+              type: 'button',
+              class: 'booking',
+              style: { top: `calc(${top}% + 2px)`, height: `calc(${height}% - 4px)` },
+              title: `${b.title}｜${b.booker}｜${b.start}–${b.end}`,
+              onclick: () => openDialog(b),
+            },
+            el('strong', {}, b.title),
+            el('span', {}, `${b.booker}・${b.start}–${b.end}`)));
+          });
+
+        nodes.push(col);
+      }
+
+      board.replaceChildren(...nodes);
+    }
+
+    // ---- 預約對話框 ----
+    const dialog = $('booking-dialog');
+    const form = $('booking-form');
+    const formError = $('form-error');
+
+    function fillTimeOptions(select, from, to) {
+      select.replaceChildren();
+      for (let m = from; m <= to; m += STEP) select.append(el('option', { value: fromMin(m) }, fromMin(m)));
+    }
+
+    $('f-room').append(...ROOMS.map((r) => el('option', { value: r.id }, `${r.name}（${r.capacity} 人）`)));
+    fillTimeOptions($('f-start'), DAY_START, DAY_END - STEP);
+    fillTimeOptions($('f-end'), DAY_START + STEP, DAY_END);
+
+    // 開始時間調到結束時間之後時，自動把結束往後推 30 分鐘
+    $('f-start').addEventListener('change', () => {
+      if (toMin($('f-end').value) <= toMin($('f-start').value)) {
+        $('f-end').value = fromMin(toMin($('f-start').value) + STEP);
+      }
+    });
+
+    function openDialog(b) {
+      editingId = b.id || null;
+      $('dialog-title').textContent = editingId ? '修改預約' : '新增預約';
+      $('btn-delete').hidden = !editingId;
+      $('f-room').value = b.roomId;
+      $('f-date').value = b.date;
+      $('f-start').value = b.start;
+      $('f-end').value = b.end;
+      $('f-title').value = b.title || '';
+      $('f-booker').value = b.booker || '';
+      formError.textContent = '';
+      dialog.showModal();
+      (editingId ? $('btn-save') : $('f-title')).focus();
+    }
+
+    function defaultNewBooking() {
+      // 預設：目前日期中下一個還沒過的半點；今天已過 17:30 就排到隔天
+      let date = currentDate;
+      let m = DAY_START;
+      const now = new Date();
+      if (date === toISODate(now)) {
+        m = Math.ceil((now.getHours() * 60 + now.getMinutes() + 1) / STEP) * STEP;
+        if (m > DAY_END - STEP) { date = addDays(date, 1); m = DAY_START; }
+        m = Math.max(m, DAY_START);
+      }
+      return { roomId: ROOMS[0].id, date, start: fromMin(m), end: fromMin(Math.min(m + 60, DAY_END)) };
+    }
+
+    form.addEventListener('submit', (e) => {
+      e.preventDefault();
+      const data = {
+        roomId: $('f-room').value,
+        date: $('f-date').value,
+        start: $('f-start').value,
+        end: $('f-end').value,
+        title: $('f-title').value.trim(),
+        booker: $('f-booker').value.trim(),
+      };
+      const error = validate(data, editingId);
+      if (error) {
+        formError.textContent = error;
+        showToast(error, 'error');
+        return;
+      }
+
+      if (editingId) {
+        const i = bookings.findIndex((b) => b.id === editingId);
+        bookings[i] = { ...bookings[i], ...data };
+      } else {
+        bookings.push({ id: newId(), ...data, createdAt: new Date().toISOString() });
+      }
+      saveBookings();
+      currentDate = data.date;
+      dialog.close();
+      render();
+      showToast(editingId ? '預約已更新' : '預約成功');
+    });
+
+    $('btn-delete').addEventListener('click', () => {
+      const b = bookings.find((x) => x.id === editingId);
+      if (!b) return;
+      if (!confirm(`確定要取消「${b.title}」（${b.start}–${b.end}）嗎？`)) return;
+      bookings = bookings.filter((x) => x.id !== editingId);
+      saveBookings();
+      dialog.close();
+      render();
+      showToast('預約已取消');
+    });
+
+    $('btn-close').addEventListener('click', () => dialog.close());
+
+    // ---- 提示訊息 ----
+    let toastTimer;
+    function showToast(msg, type = '') {
+      const t = $('toast');
+      t.textContent = msg;
+      t.className = `toast show ${type}`;
+      clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => { t.className = 'toast'; }, 2800);
+    }
+
+    // ---- 日期切換 ----
+    const goTo = (iso) => { if (iso) { currentDate = iso; render(); } };
+    $('btn-prev').addEventListener('click', () => goTo(addDays(currentDate, -1)));
+    $('btn-next').addEventListener('click', () => goTo(addDays(currentDate, 1)));
+    $('btn-today').addEventListener('click', () => goTo(toISODate(new Date())));
+    $('date-picker').addEventListener('change', (e) => goTo(e.target.value));
+    $('btn-new').addEventListener('click', () => openDialog(defaultNewBooking()));
+
+    render();
+    // 每分鐘重繪一次，讓「已過時段」保持正確
+    setInterval(() => { if (!dialog.open) render(); }, 60 * 1000);
+  </script>
+</body>
+</html>
