@@ -1,0 +1,91 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>衝突檢查測試</title>
+  <style>
+    body { font-family: system-ui, -apple-system, "Microsoft JhengHei", sans-serif; margin: 0; padding: 16px; background: #f6f7f9; color: #1f2933; }
+    h1 { font-size: 1.25rem; margin: 0 0 12px; }
+    .summary { padding: 12px 16px; border-radius: 8px; font-weight: 600; margin-bottom: 16px; }
+    .summary.pass { background: #e3f6e8; color: #1b6b34; }
+    .summary.fail { background: #fde8e8; color: #9b1c1c; }
+    .table-wrap { overflow-x: auto; }
+    table { width: 100%; border-collapse: collapse; background: #fff; border-radius: 8px; overflow: hidden; }
+    th, td { padding: 8px 12px; text-align: left; border-bottom: 1px solid #e4e7eb; white-space: nowrap; }
+    th { background: #eef1f4; font-size: 0.875rem; }
+    td.name { white-space: normal; min-width: 12em; }
+    tr.fail td { background: #fff5f5; }
+  </style>
+</head>
+<body>
+  <h1>衝突檢查測試：findConflict（app.js）</h1>
+  <div class="summary" id="summary">測試執行中…</div>
+  <div class="table-wrap">
+    <table>
+      <thead>
+        <tr><th>結果</th><th>測試名稱</th><th>預期值</th><th>實際值</th></tr>
+      </thead>
+      <tbody id="results"></tbody>
+    </table>
+  </div>
+
+  <script src="app.js"></script>
+  <script>
+    'use strict';
+
+    // 既有預約：大會議室 2030-01-01 10:00–12:00
+    const DATE = '2030-01-01';
+    const existing = [
+      { id: 'e1', roomId: 'big', date: DATE, start: '10:00', end: '12:00', title: '既有會議', booker: '王小明' },
+    ];
+
+    // 每個測試：名稱、要檢查的新預約、是否預期衝突
+    const cases = [
+      // 一般情況
+      { name: '完全相同時段（10:00–12:00）', data: { roomId: 'big', date: DATE, start: '10:00', end: '12:00' }, expect: true },
+      { name: '完全錯開的時段（14:00–15:00）', data: { roomId: 'big', date: DATE, start: '14:00', end: '15:00' }, expect: false },
+      // 邊界情況
+      { name: '部分重疊：前段（09:00–10:30）', data: { roomId: 'big', date: DATE, start: '09:00', end: '10:30' }, expect: true },
+      { name: '部分重疊：後段（11:30–13:00）', data: { roomId: 'big', date: DATE, start: '11:30', end: '13:00' }, expect: true },
+      { name: '完全包含：新預約在既有預約內（10:30–11:30）', data: { roomId: 'big', date: DATE, start: '10:30', end: '11:30' }, expect: true },
+      { name: '完全包含：新預約包住既有預約（09:00–13:00）', data: { roomId: 'big', date: DATE, start: '09:00', end: '13:00' }, expect: true },
+      { name: '緊鄰時段：接在後面（12:00–14:00）應允許', data: { roomId: 'big', date: DATE, start: '12:00', end: '14:00' }, expect: false },
+      { name: '緊鄰時段：接在前面（08:00–10:00）應允許', data: { roomId: 'big', date: DATE, start: '08:00', end: '10:00' }, expect: false },
+      { name: '不同會議室同時段（小會議室 A 10:00–12:00）應允許', data: { roomId: 'a', date: DATE, start: '10:00', end: '12:00' }, expect: false },
+    ];
+
+    const label = (conflict) => (conflict ? '衝突' : '無衝突');
+    const tbody = document.getElementById('results');
+    let passed = 0;
+
+    for (const c of cases) {
+      let actualText;
+      let ok;
+      try {
+        const actual = Boolean(findConflict(existing, c.data));
+        actualText = label(actual);
+        ok = actual === c.expect;
+      } catch (err) {
+        actualText = `錯誤：${err.message}`;
+        ok = false;
+      }
+      if (ok) passed++;
+
+      const tr = document.createElement('tr');
+      if (!ok) tr.className = 'fail';
+      for (const [text, cls] of [[ok ? '✅' : '❌'], [c.name, 'name'], [label(c.expect)], [actualText]]) {
+        const td = document.createElement('td');
+        td.textContent = text;
+        if (cls) td.className = cls;
+        tr.append(td);
+      }
+      tbody.append(tr);
+    }
+
+    const summary = document.getElementById('summary');
+    summary.textContent = `通過 ${passed} 項／共 ${cases.length} 項`;
+    summary.className = 'summary ' + (passed === cases.length ? 'pass' : 'fail');
+  </script>
+</body>
+</html>
