@@ -25,24 +25,23 @@
       color-scheme: light;
     }
 
-    @media (prefers-color-scheme: dark) {
-      :root {
-        --bg: #0f1115;
-        --surface: #181b21;
-        --text: #e6e8eb;
-        --muted: #9aa1ab;
-        --border: #2a2f37;
-        --line: #22262d;
-        --primary: #3b82f6;
-        --danger: #ef4444;
-        --past: #14161a;
-        --hover: #1d2738;
-        --room-big: #3b82f6;
-        --room-a: #10b981;
-        --room-b: #f59e0b;
-        --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 4px 12px rgba(0, 0, 0, .3);
-        color-scheme: dark;
-      }
+    /* 深色模式：由 <html data-theme="dark"> 啟用，初始值跟隨系統設定，可用標題列的按鈕切換 */
+    :root[data-theme="dark"] {
+      --bg: #0f1115;
+      --surface: #181b21;
+      --text: #e6e8eb;
+      --muted: #9aa1ab;
+      --border: #2a2f37;
+      --line: #22262d;
+      --primary: #3b82f6;
+      --danger: #ef4444;
+      --past: #14161a;
+      --hover: #1d2738;
+      --room-big: #3b82f6;
+      --room-a: #10b981;
+      --room-b: #f59e0b;
+      --shadow: 0 1px 2px rgba(0, 0, 0, .4), 0 4px 12px rgba(0, 0, 0, .3);
+      color-scheme: dark;
     }
 
     * { box-sizing: border-box; }
@@ -73,6 +72,7 @@
     }
 
     h1 { font-size: 22px; margin: 0; }
+    .topbar-actions { display: flex; gap: 8px; flex-shrink: 0; }
 
     .datebar {
       display: flex;
@@ -276,11 +276,25 @@
       .date-label { width: 100%; }
     }
   </style>
+  <script>
+    // 在畫面繪製前套用主題，避免先閃一下淺色：有記住的選擇就用它，否則跟隨系統設定
+    (function () {
+      let theme = null;
+      try { theme = localStorage.getItem('mrb:theme'); } catch {}
+      if (theme !== 'dark' && theme !== 'light') {
+        theme = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+      }
+      document.documentElement.dataset.theme = theme;
+    })();
+  </script>
 </head>
 <body>
   <header class="topbar">
     <h1>會議室預約看板</h1>
-    <button type="button" class="btn btn-primary" id="btn-new">＋ 新增預約</button>
+    <div class="topbar-actions">
+      <button type="button" class="btn" id="btn-theme" aria-pressed="false">🌙 深色</button>
+      <button type="button" class="btn btn-primary" id="btn-new">＋ 新增預約</button>
+    </div>
   </header>
 
   <nav class="datebar" aria-label="日期切換">
@@ -748,6 +762,26 @@
     }
 
     $('btn-export').addEventListener('click', exportCsv);
+
+    // ---- 深色模式 ----
+    const themeBtn = $('btn-theme');
+
+    function applyTheme(theme) {
+      document.documentElement.dataset.theme = theme;
+      const dark = theme === 'dark';
+      // 按鈕顯示「按下去會切換成什麼」
+      themeBtn.textContent = dark ? '☀️ 淺色' : '🌙 深色';
+      themeBtn.setAttribute('aria-pressed', String(dark));
+      themeBtn.setAttribute('aria-label', dark ? '切換成淺色模式' : '切換成深色模式');
+    }
+
+    themeBtn.addEventListener('click', () => {
+      const next = document.documentElement.dataset.theme === 'dark' ? 'light' : 'dark';
+      applyTheme(next);
+      try { localStorage.setItem('mrb:theme', next); } catch {}
+    });
+
+    applyTheme(document.documentElement.dataset.theme);
 
     render();
     // 每分鐘重繪一次，讓「已過時段」保持正確
